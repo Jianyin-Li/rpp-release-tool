@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            platform: linux/amd64
+          - arch: arm64
+            platform: linux/arm64
+          - arch: armhf
+            platform: linux/arm/v7
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        if: matrix.arch != 'amd64'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Build, test and package in debian:trixie
+        run: |
+          docker run --rm --platform "${{ matrix.platform }}" \
+            -v "$PWD:/work" -w /work \
+            -e DEBIAN_FRONTEND=noninteractive \
+            debian:trixie bash -c '
+              set -e
+              apt-get update
+              apt-get install -y --no-install-recommends \
+                build-essential cmake libftxui-dev libtomlplusplus-dev \
+                dpkg-dev file xz-utils
+              cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+              cmake --build build -j"$(nproc)"
+              ./build/rpp_tests
+              bash tests/integration.sh ./build/rpp-release-tool
+              bash scripts/make-release.sh build dist
+            '
+
+      - name: Fix workspace ownership
+        run: sudo chown -R "$(id -u):$(id -g)" build dist || true
+
+      - name: Upload ${{ matrix.arch }} artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  assemble:
+    name: Assemble release files
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all architecture artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-*
+          path: incoming
+          merge-multiple: true
+
+      - name: Make the repo-import tar and checksums
+        run: |
+          mkdir -p dist
+          find incoming -maxdepth 1 -type f \
+            \( -name '*.deb' -o -name 'rpp-release-tool-*-linux-*' \) \
+            -exec cp -p {} dist/ \;
+          shopt -s nullglob
+          for f in dist/rpp-release-tool-*-linux-*; do chmod +x "$f"; done
+          bash scripts/make-debs-tar.sh dist
+
+      - name: Show artifacts
+        run: ls -lh dist
+
+      - name: Upload combined artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: assemble
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download combined artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist
+
+      - name: Verify checksums
+        run: cd dist && sha256sum -c sha256sums.txt
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: rpp-release-tool ${{ github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.deb
+            dist/*.tar
+            dist/rpp-release-tool-*-linux-*
+            dist/sha256sums.txt

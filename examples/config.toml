@@ -1,0 +1,34 @@
+# rpp-release-tool example configuration
+#
+# Copy this file to ~/.config/rpp-release-tool/config.toml (or pass
+# --config) and adjust the paths for your reprepro repository and build
+# output directory.
+
+version = 1
+default_repo = "local"
+
+[paths]
+# Directory containing the .deb/.dsc files to publish.
+artifacts = "/path/to/artifacts"
+
+[policy]
+require_both = true       # warn (and ask) when only .deb or only .dsc is present
+missing_arch = "error"    # error | warn | ignore
+buildinfo = "warn"        # error | warn | ignore
+sha256 = "error"          # error | warn | ignore
+allow_replace = false     # allow overwriting an already published version
+
+[ui]
+detail = "normal"         # summary | normal | full
+unchanged_fold = 15       # fold unchanged entries; -1 never, 0 hide
+language = "auto"         # auto | zh-CN | en-US
+
+[[repo]]
+name = "local"
+base = "/srv/reprepro"
+conf = "/srv/reprepro/conf/distributions"
+codename = "trixie"
+component = "main"
+architectures = ["amd64", "arm64", "source"]
+# Optional: directory containing .changes/.dsc/.deb uploads.
+# incoming = "/srv/reprepro/incoming"
