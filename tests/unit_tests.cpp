@@ -107,13 +107,13 @@ static void test_reprepro_conf() {
 
 static void test_policy_defaults() {
   rpp::Policy p;
-  CHECK(!p.require_both);
+  CHECK(p.require_both);
   CHECK(p.missing_arch == "warn");
   CHECK(p.buildinfo == "warn");
   CHECK(p.sha256 == "error");
   CHECK(!p.allow_replace);
   rpp::Config c = rpp::default_config();
-  CHECK(!c.policy.require_both);
+  CHECK(c.policy.require_both);
   CHECK(c.policy.missing_arch == "warn");
 }
 
@@ -143,8 +143,10 @@ static void test_config_roundtrip() {
   CHECK(load.exists);
   CHECK(load.cfg.repos.size() == 1);
   CHECK(load.cfg.repos[0].name == "spark");
-  CHECK(load.cfg.repos[0].architectures.size() == 2);
-  CHECK(load.cfg.repos[0].codename == "trixie");
+  // Derived fields are not stored in the app config anymore.
+  CHECK(load.cfg.repos[0].architectures.empty());
+  CHECK(load.cfg.repos[0].codename.empty());
+  CHECK(load.cfg.repos[0].component.empty());
   CHECK(load.cfg.ui.detail == "full");
   CHECK(load.cfg.ui.unchanged_fold == 5);
   CHECK(load.cfg.ui.language == "en-US");
@@ -205,6 +207,24 @@ static void test_minimal_repo_config() {
   CHECK(rpp::repo_conf_path(load2.cfg.repos[0]) == dir / "conf" / "distributions");
   errs.clear();
   CHECK(rpp::validate_config(load2.cfg, &errs));
+
+  // Legacy derived fields are ignored on load and not written back.
+  auto path4 = dir / "config4.toml";
+  write_file(path4,
+             "version = 1\n"
+             "[[repo]]\n"
+             "base = \"" + dir.string() + "\"\n"
+             "codename = \"trixie\"\n"
+             "component = \"main\"\n"
+             "architectures = [\"amd64\", \"armhf\"]\n");
+  auto load4 = rpp::load_config(path4);
+  CHECK(load4.ok);
+  CHECK(load4.cfg.repos[0].codename.empty());
+  CHECK(load4.cfg.repos[0].component.empty());
+  CHECK(load4.cfg.repos[0].architectures.empty());
+  auto serialized = rpp::config_to_string(load4.cfg);
+  CHECK(serialized.find("codename") == std::string::npos);
+  CHECK(serialized.find("architectures") == std::string::npos);
 
   // Missing config file is reported by validation instead of being accepted.
   auto bad = dir / "bad.toml";

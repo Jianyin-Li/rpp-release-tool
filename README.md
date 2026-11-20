@@ -102,8 +102,8 @@ version = 1
 artifacts = "/srv/incoming"          # 待发布产物目录
 
 [policy]
-require_both   = false               # 缺 deb/dsc 时只提醒；true 才弹确认
-missing_arch   = "warn"              # error | warn | ignore（默认只提醒）
+require_both   = true                # 缺 deb/dsc 时弹窗确认
+missing_arch   = "warn"              # error | warn | ignore（warn = 发布前弹窗确认）
 buildinfo      = "warn"
 sha256         = "error"
 allow_replace  = false               # 允许同版本覆盖（remove + include）
@@ -126,9 +126,12 @@ base = "/srv/reprepro"
 
 策略默认值偏向“只提醒，不硬拦”：
 
-- `require_both = false`：只有 `.deb` 或只有 `.dsc` 时，报告里提醒，但不再强制确认；设为 `true` 才需要确认。
-- `missing_arch = "warn"`：目标架构不齐只提醒；设为 `"error"` 才阻塞。
+- `require_both = true`（默认）：只有 `.deb` 或只有 `.dsc` 时，确认页弹出提醒，需要 `y`/回车确认。
+- `missing_arch = "warn"`（默认）：目标架构不齐时确认页弹出提醒，需要确认；设为 `"error"` 才直接阻塞。
+- `buildinfo = "warn"`（默认）：缺 `.buildinfo` 同样在确认页提醒。
+- `"ignore"` 完全忽略；`"error"` 直接阻塞。
 - `sha256 = "error"` 保持阻塞，因为校验和不匹配是真实的包损坏/污染。
+- `allow_replace = false` 保持阻塞/需显式开启，因为覆盖是破坏性操作。
 
 例如 `conf/distributions` 里有：
 
@@ -180,14 +183,12 @@ rpp-release-tool /tmp/pub/ccid
     选择目标仓库和本地包，预览变更后发布
   管理已发布包
     删除包、重新导出索引、清理未引用文件
-  编辑仓库设置
-    仓库、路径、发布策略
-  应用程序设置
-    界面、语言、详细程度、折叠阈值
+  设置
+    仓库、路径、发布策略、界面
 ```
 
-- `↑/↓` 选择，`enter` 进入，也可以直接按 `1`~`4`。
-- “编辑仓库设置”打开设置页的仓库标签；“应用程序设置”直接打开界面标签。两者仍是同一个设置页，可以继续用 `tab` 切换。
+- `↑/↓` 选择，`enter` 进入，也可以直接按 `1`~`3`。
+- “设置”打开统一设置页，默认在仓库标签；用 `tab` 切到路径、策略、界面。
 - 选“上传/更新包”后进入目标仓库树，选 component → 选择本地包集 → 预览 → 确认。
 - 选“管理已发布包”后进入同一个仓库树，选 component 后进入**仓库维护**页。
 

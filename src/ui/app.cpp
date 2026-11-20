@@ -100,7 +100,7 @@ struct App {
   bool blocked = false;
   bool needs_ack = false;
   bool replace_needed = false;
-  std::string scene_warning;
+  std::vector<std::string> confirm_warnings;
   int issue_scroll = 0;
 
   // Local package-set picker.  `source_dir` is the user's build directory;
@@ -236,13 +236,22 @@ void ensure_selection(App& a) {
   load_conf(a);
 
   if (!a.opts.codename.empty()) a.codename = a.opts.codename;
-  if (a.codename.empty()) a.codename = r.codename;
-  if (a.codename.empty() && !a.conf.distributions.empty()) a.codename = a.conf.distributions.front().codename;
-  if (a.codename.empty()) a.codename = r.codename;
+  if (a.codename.empty() && !a.conf.distributions.empty()) {
+    a.codename = a.conf.distributions.front().codename;
+  }
+  // A cached/previous codename may no longer exist in the live config; only
+  // explicit CLI overrides are kept as-is so preflight can report them.
+  if (a.opts.codename.empty() && !a.codename.empty() && !a.conf.distributions.empty() &&
+      !find_dist(a.conf, a.codename)) {
+    a.codename = a.conf.distributions.front().codename;
+  }
 
   const Distribution* d = find_dist(a.conf, a.codename);
   if (!a.opts.component.empty()) a.component = a.opts.component;
-  if (a.component.empty()) a.component = r.component;
+  if (a.opts.component.empty() && d && !d->components.empty() && !a.component.empty() &&
+      std::find(d->components.begin(), d->components.end(), a.component) == d->components.end()) {
+    a.component = d->components.front();
+  }
   if (a.component.empty() && d && !d->components.empty()) a.component = d->components.front();
   if (a.component.empty()) a.component = "main";
 }
@@ -342,6 +351,19 @@ void evaluate_art(App& a) {
   auto pf = run_preflight(pi);
   a.issues.insert(a.issues.end(), pf.begin(), pf.end());
 
+  // Non-security policy warnings are surfaced as a confirmation popup on the
+  // confirm screen (require_both, missing_arch=warn, buildinfo=warn).
+  a.confirm_warnings.clear();
+  for (const auto& is : a.issues) {
+    if (is.sev != Severity::Warn) continue;
+    bool scene = is.code == "scene.binary" || is.code == "scene.source";
+    if (scene && !a.cfg.policy.require_both) continue;
+    if (scene || is.code == "arch.missing" || is.code == "buildinfo.missing") {
+      a.confirm_warnings.push_back(is.msg);
+    }
+  }
+  a.needs_ack = !a.confirm_warnings.empty();
+
   fs::path base = effective_base(r, a.conf);
   std::vector<std::string> archs = selection_archs(a);
   RepoState st = load_repo_state(base, a.codename, a.component, archs);
@@ -370,14 +392,8 @@ void evaluate_art(App& a) {
   a.verify_issues.clear();
 
   a.blocked = has_blocking(a.issues);
-  a.needs_ack = a.cfg.policy.require_both &&
-               (a.art.scene == Scene::BinaryOnly || a.art.scene == Scene::SourceOnly);
   a.replace_needed = a.diff.modified > 0;
   if (a.replace_needed && !a.cfg.policy.allow_replace) a.blocked = true;
-
-  a.scene_warning.clear();
-  if (a.art.scene == Scene::BinaryOnly) a.scene_warning = tr("confirm.binary_only");
-  else if (a.art.scene == Scene::SourceOnly) a.scene_warning = tr("confirm.source_only");
 
   a.cmds = build_commands(r, base, a.codename, a.component, a.art, a.diff, a.cfg.policy.allow_replace);
 }
@@ -973,9 +989,6 @@ void build_fields(App& a) {
     a.fields.push_back(text_field("name", "field.name", r.name));
     a.fields.push_back(text_field("base", "field.base", r.base.string()));
     a.fields.push_back(text_field("conf", "field.conf", r.conf.string()));
-    a.fields.push_back(text_field("codename", "field.codename", r.codename));
-    a.fields.push_back(text_field("component", "field.component", r.component));
-    a.fields.push_back(text_field("architectures", "field.architectures", join(r.architectures, " ")));
     a.fields.push_back(text_field("incoming", "field.incoming", r.incoming.string()));
   };
 
@@ -1031,9 +1044,6 @@ void apply_fields(App& a) {
   if (has("base")) r.base = expand_user(field_value(a, "base"));
   if (r.name.empty() && !r.base.empty()) r.name = r.base.filename().string();
   if (has("conf")) r.conf = expand_user(field_value(a, "conf"));
-  if (has("codename")) r.codename = field_value(a, "codename");
-  if (has("component")) r.component = field_value(a, "component");
-  if (has("architectures")) r.architectures = split(field_value(a, "architectures"));
   if (has("incoming")) r.incoming = expand_user(field_value(a, "incoming"));
   if (has("artifacts")) {
     fs::path next = expand_user(field_value(a, "artifacts"));
@@ -1215,6 +1225,8 @@ Element render_form(App& a) {
   }
   if (a.screen == Screen::Config || a.tab == 0) {
     lines.push_back(text(tr("config.auto_hint")) | dim);
+  } else if (a.screen == Screen::Settings && a.tab == 2) {
+    lines.push_back(text(tr("config.policy_hint")) | dim);
   }
 
   // live conf parse status
@@ -1249,11 +1261,10 @@ Element render_home(App& a) {
   if (a.cfg.repos.empty()) lines.push_back(text(tr("home.no_config")) | color(Color::Yellow));
   lines.push_back(separator());
 
-  std::string titles[4] = {tr("home.upload"), tr("home.manage"),
-                           tr("home.repo_settings"), tr("home.app_settings")};
-  std::string descs[4] = {tr("home.upload.desc"), tr("home.manage.desc"),
-                          tr("home.repo_settings.desc"), tr("home.app_settings.desc")};
-  for (int i = 0; i < 4; ++i) {
+  std::string titles[3] = {tr("home.upload"), tr("home.manage"), tr("home.settings")};
+  std::string descs[3] = {tr("home.upload.desc"), tr("home.manage.desc"),
+                          tr("home.settings.desc")};
+  for (int i = 0; i < 3; ++i) {
     Element title = text("  " + titles[i] + "  ");
     if (i == a.home_sel) title |= inverted;
     if (i == a.home_sel) title |= bold;
@@ -1626,8 +1637,10 @@ Element render_confirm(App& a) {
   lines.push_back(text(tr("confirm.title")) | bold | color(Color::Yellow));
   lines.push_back(separator());
   lines.push_back(text(trf("diff.counts", a.diff.added, a.diff.modified, a.diff.unchanged)));
-  if (!a.scene_warning.empty() && !a.ack_scene) {
-    lines.push_back(text(a.scene_warning) | color(Color::Yellow));
+  if (!a.ack_scene) {
+    for (const auto& w : a.confirm_warnings) {
+      lines.push_back(text("! " + w) | color(Color::Yellow));
+    }
   }
   if (a.replace_needed && a.cfg.policy.allow_replace) {
     lines.push_back(text(trf("confirm.replace", a.diff.modified)) | color(Color::Yellow));
@@ -1639,7 +1652,7 @@ Element render_confirm(App& a) {
   if (a.cmds.size() > 8) lines.push_back(text(trf("diff.collapsed", a.cmds.size() - 8)) | dim);
   lines.push_back(separator());
 
-  if (a.needs_ack && !a.scene_warning.empty() && !a.ack_scene) {
+  if (a.needs_ack && !a.ack_scene) {
     lines.push_back(text(tr("confirm.ack_hint")) | bold);
   } else if (a.replace_needed) {
     lines.push_back(text(trf("confirm.type_codename", a.codename)) | color(Color::Yellow));
@@ -1780,7 +1793,7 @@ std::pair<std::vector<HelpItem>, std::vector<HelpItem>> help_items(App& a) {
               {"esc", tr("help.back")}};
       break;
     case Screen::Confirm:
-      if (a.needs_ack && !a.scene_warning.empty() && !a.ack_scene) {
+      if (a.needs_ack && !a.ack_scene) {
         page = {{"y/enter", tr("help.ack")}, {"esc", tr("help.back")}};
       } else if (a.replace_needed) {
         page = {{"type", tr("help.type")}, {"esc", tr("help.back")}};
@@ -2282,7 +2295,7 @@ bool handle_event(App& a, const Event& e, ScreenInteractive& scr) {
   // otherwise trigger the global single-key shortcuts below).
   const bool typing_codename =
       a.screen == Screen::Confirm && a.replace_needed &&
-      (!a.needs_ack || a.scene_warning.empty() || a.ack_scene);
+      (!a.needs_ack || a.ack_scene);
 
   // In the directory browser, printable letters are a jump-to-prefix filter,
   // so they must not trigger the global shortcuts either.
@@ -2335,16 +2348,16 @@ bool handle_event(App& a, const Event& e, ScreenInteractive& scr) {
     case Screen::Home: {
       if (e == Event::ArrowUp || e == Event::ArrowDown) {
         int dir = e == Event::ArrowUp ? -1 : 1;
-        a.home_sel = (a.home_sel + dir + 4) % 4;
+        a.home_sel = (a.home_sel + dir + 3) % 3;
         return true;
       }
       if (e == Event::Character('1') || e == Event::Character('2') ||
-          e == Event::Character('3') || e == Event::Character('4')) {
+          e == Event::Character('3')) {
         a.home_sel = e.character()[0] - '1';
         // fall through to open below
       }
       if (e == Event::Return || (e.is_character() && e.character().size() == 1 &&
-                                 e.character()[0] >= '1' && e.character()[0] <= '4')) {
+                                 e.character()[0] >= '1' && e.character()[0] <= '3')) {
         switch (a.home_sel) {
           case 0:
             a.repos_purpose = ReposPurpose::Upload;
@@ -2360,13 +2373,6 @@ bool handle_event(App& a, const Event& e, ScreenInteractive& scr) {
             a.return_screen = Screen::Home;
             a.screen = Screen::Settings;
             a.tab = 0;
-            a.toast.clear();
-            build_fields(a);
-            break;
-          case 3:
-            a.return_screen = Screen::Home;
-            a.screen = Screen::Settings;
-            a.tab = 3;
             a.toast.clear();
             build_fields(a);
             break;
@@ -2770,7 +2776,7 @@ bool handle_event(App& a, const Event& e, ScreenInteractive& scr) {
         a.screen = Screen::Diff;
         return true;
       }
-      if (a.needs_ack && !a.scene_warning.empty() && !a.ack_scene) {
+      if (a.needs_ack && !a.ack_scene) {
         if (e == Event::Character('y') || e == Event::Return) {
           a.ack_scene = true;
           return true;

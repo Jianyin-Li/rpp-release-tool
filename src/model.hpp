@@ -85,7 +85,7 @@ struct Distribution {
 };
 
 struct Policy {
-  bool require_both = false;           // warn only; true requires an ack
+  bool require_both = true;            // prompt when only .deb/.dsc is present
   std::string missing_arch = "warn";   // error | warn | ignore
   std::string buildinfo = "warn";      // error | warn | ignore
   std::string sha256 = "error";        // error | warn | ignore

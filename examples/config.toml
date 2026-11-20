@@ -12,7 +12,7 @@ default_repo = "local"
 artifacts = "/path/to/artifacts"
 
 [policy]
-require_both = false      # warn only when only .deb/.dsc is present; true asks for confirmation
+require_both = true       # ask for confirmation when only .deb or only .dsc is present
 missing_arch = "warn"     # error | warn | ignore
 buildinfo = "warn"        # error | warn | ignore
 sha256 = "error"          # error | warn | ignore
@@ -27,8 +27,7 @@ language = "auto"         # auto | zh-CN | en-US
 name = "local"
 base = "/srv/reprepro"
 conf = "/srv/reprepro/conf/distributions"
-codename = "trixie"
-component = "main"
-architectures = ["amd64", "arm64", "source"]
+# codename/component/architectures are read from conf/distributions on every
+# run; they are intentionally not stored in this file.
 # Optional: directory containing .changes/.dsc/.deb uploads.
 # incoming = "/srv/reprepro/incoming"

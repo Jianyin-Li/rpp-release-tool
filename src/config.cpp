@@ -182,9 +182,8 @@ ConfigLoad load_config(const fs::path& explicit_path) {
         rp.name = str(*rt, "name");
         rp.base = expand_user(str(*rt, "base"));
         rp.conf = expand_user(str(*rt, "conf", (rp.base / "conf" / "distributions").string()));
-        rp.codename = str(*rt, "codename");
-        rp.component = str(*rt, "component");
-        rp.architectures = str_array(rt->get("architectures"));
+        // codename/component/architectures are deliberately not read from the
+        // app config: they are always taken from the live distributions file.
         rp.incoming = expand_user(str(*rt, "incoming"));
         if (rp.name.empty() && !rp.base.empty()) rp.name = rp.base.filename().string();
         c.repos.push_back(std::move(rp));
@@ -304,9 +303,6 @@ std::string config_to_string(const Config& cfg) {
     os << "name = " << quote(r.name) << "\n";
     os << "base = " << quote(r.base.string()) << "\n";
     if (!r.conf.empty()) os << "conf = " << quote(r.conf.string()) << "\n";
-    if (!r.codename.empty()) os << "codename = " << quote(r.codename) << "\n";
-    if (!r.component.empty()) os << "component = " << quote(r.component) << "\n";
-    if (!r.architectures.empty()) os << "architectures = " << arr(r.architectures) << "\n";
     if (!r.incoming.empty()) os << "incoming = " << quote(r.incoming.string()) << "\n";
   }
   return os.str();
