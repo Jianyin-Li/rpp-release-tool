@@ -1,6 +1,6 @@
 # rpp-release-tool
 
-版本：**0.0.3**
+版本：**0.0.4**
 
 reprepro 的**发布前置闸门**：扫描产物目录 → 校验 `.deb` / `.dsc` → 预检目标仓库 → 预览变更树 → 确认 → 真正执行 reprepro → 发布后核对。
 
@@ -67,11 +67,11 @@ bash scripts/make-repo-tar.sh build-out dist
 
 输出：
 
-- `rpp-release-tool_0.0.3_<arch>.deb`：安装到 `/usr/bin/rpp-release-tool`，文档在 `/usr/share/doc/rpp-release-tool/`。
-- `rpp-release-tool-0.0.3-linux-<arch>`：原始二进制（dh_strip 已 strip）。
-- `rpp-release-tool-0.0.3-repo.tar`：**不压缩**，包含：
+- `rpp-release-tool_0.0.4_<arch>.deb`：安装到 `/usr/bin/rpp-release-tool`，文档在 `/usr/share/doc/rpp-release-tool/`。
+- `rpp-release-tool-0.0.4-linux-<arch>`：原始二进制（dh_strip 已 strip）。
+- `rpp-release-tool-0.0.4-repo.tar`：**不压缩**，包含：
   - 全部架构的 `.deb`
-  - `rpp-release-tool_0.0.3.dsc` + 源码 `rpp-release-tool_0.0.3.tar.xz`
+  - `rpp-release-tool_0.0.4.dsc` + 源码 `rpp-release-tool_0.0.4.tar.xz`
   - 每个架构的 `.buildinfo`
   
   解包后直接指向该目录，本工具会看到完整源码 + 两个二进制 + buildinfo，不再有 “only .deb / missing .buildinfo” 警告。
@@ -84,7 +84,7 @@ CI（`.github/workflows/ci.yml`）用 matrix 在 Debian trixie 里构建两种�
 | amd64 | `linux/amd64` |
 | arm64 | `linux/arm64`（QEMU） |
 
-每个架构用 `dpkg-buildpackage -b` 产出 `.deb` + `.buildinfo` + 原始二进制；amd64 额外用 `dpkg-buildpackage -S` 产出源码包。最后的 `assemble` job 汇总成一个 `rpp-release-tool-0.0.3-repo.tar` 和校验和。推送 `v*` 标签时自动创建 GitHub Release，附件为：两个 `.deb`、两个原始二进制、一个 repo tar、校验和文件。
+每个架构用 `dpkg-buildpackage -b` 产出 `.deb` + `.buildinfo` + 原始二进制；amd64 额外用 `dpkg-buildpackage -S` 产出源码包。最后的 `assemble` job 汇总成一个 `rpp-release-tool-0.0.4-repo.tar` 和校验和。推送 `v*` 标签时自动创建 GitHub Release，附件为：两个 `.deb`、两个原始二进制、一个 repo tar、校验和文件。
 
 ---
 

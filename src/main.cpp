@@ -258,7 +258,7 @@ int main(int argc, char** argv) {
     return kExitOk;
   }
   if (cli.version) {
-    std::cout << "rpp-release-tool 0.0.3\n";
+    std::cout << "rpp-release-tool 0.0.4\n";
     return kExitOk;
   }
   if (cli.show_config) {
