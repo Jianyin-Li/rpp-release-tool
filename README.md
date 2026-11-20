@@ -74,18 +74,17 @@ bash scripts/make-repo-tar.sh build-out dist
   - `rpp-release-tool_0.0.3.dsc` + 源码 `rpp-release-tool_0.0.3.tar.xz`
   - 每个架构的 `.buildinfo`
   
-  解包后直接指向该目录，本工具会看到完整源码 + 三个二进制 + buildinfo，不再有 “only .deb / missing .buildinfo” 警告。
+  解包后直接指向该目录，本工具会看到完整源码 + 两个二进制 + buildinfo，不再有 “only .deb / missing .buildinfo” 警告。
 - `sha256sums.txt`：release 目录内文件的校验和。
 
-CI（`.github/workflows/ci.yml`）用 matrix 在 Debian trixie 里构建三种架构：
+CI（`.github/workflows/ci.yml`）用 matrix 在 Debian trixie 里构建两种架构：
 
 | 目标 | 平台 |
 |---|---|
 | amd64 | `linux/amd64` |
 | arm64 | `linux/arm64`（QEMU） |
-| armhf | `linux/arm/v7`（QEMU） |
 
-每个架构用 `dpkg-buildpackage -b` 产出 `.deb` + `.buildinfo` + 原始二进制；amd64 额外用 `dpkg-buildpackage -S` 产出源码包。最后的 `assemble` job 汇总成一个 `rpp-release-tool-0.0.3-repo.tar` 和校验和。推送 `v*` 标签时自动创建 GitHub Release，附件为：三个 `.deb`、三个原始二进制、一个 repo tar、校验和文件。
+每个架构用 `dpkg-buildpackage -b` 产出 `.deb` + `.buildinfo` + 原始二进制；amd64 额外用 `dpkg-buildpackage -S` 产出源码包。最后的 `assemble` job 汇总成一个 `rpp-release-tool-0.0.3-repo.tar` 和校验和。推送 `v*` 标签时自动创建 GitHub Release，附件为：两个 `.deb`、两个原始二进制、一个 repo tar、校验和文件。
 
 ---
 
