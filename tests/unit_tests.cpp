@@ -105,6 +105,18 @@ static void test_reprepro_conf() {
   fs::remove_all(dir);
 }
 
+static void test_policy_defaults() {
+  rpp::Policy p;
+  CHECK(!p.require_both);
+  CHECK(p.missing_arch == "warn");
+  CHECK(p.buildinfo == "warn");
+  CHECK(p.sha256 == "error");
+  CHECK(!p.allow_replace);
+  rpp::Config c = rpp::default_config();
+  CHECK(!c.policy.require_both);
+  CHECK(c.policy.missing_arch == "warn");
+}
+
 static void test_config_roundtrip() {
   fs::path dir = make_tmp();
   auto path = dir / "config.toml";
@@ -542,6 +554,7 @@ static void test_i18n() {
 int main() {
   test_dsc_parse();
   test_reprepro_conf();
+  test_policy_defaults();
   test_config_roundtrip();
   test_minimal_repo_config();
   test_diff();

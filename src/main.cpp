@@ -185,7 +185,8 @@ int run_batch(const Cli& cli, const ConfigLoad& load) {
   std::cout << "\n";
 
   bool blocked = has_blocking(issues);
-  bool needs_ack = art.scene == Scene::BinaryOnly || art.scene == Scene::SourceOnly;
+  bool needs_ack = cfg.policy.require_both &&
+                   (art.scene == Scene::BinaryOnly || art.scene == Scene::SourceOnly);
   if (tree.modified > 0 && !cfg.policy.allow_replace) blocked = true;
   // Overwriting an existing version is destructive: --ack alone is not enough,
   // non-interactive callers must also pass --replace.

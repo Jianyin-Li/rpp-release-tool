@@ -365,7 +365,8 @@ void evaluate_art(App& a) {
   a.verify_issues.clear();
 
   a.blocked = has_blocking(a.issues);
-  a.needs_ack = a.art.scene == Scene::BinaryOnly || a.art.scene == Scene::SourceOnly;
+  a.needs_ack = a.cfg.policy.require_both &&
+               (a.art.scene == Scene::BinaryOnly || a.art.scene == Scene::SourceOnly);
   a.replace_needed = a.diff.modified > 0;
   if (a.replace_needed && !a.cfg.policy.allow_replace) a.blocked = true;
 
@@ -1633,8 +1634,8 @@ Element render_confirm(App& a) {
   if (a.cmds.size() > 8) lines.push_back(text(trf("diff.collapsed", a.cmds.size() - 8)) | dim);
   lines.push_back(separator());
 
-  if (!a.scene_warning.empty() && !a.ack_scene) {
-    lines.push_back(text(tr("confirm.publish_hint")) | bold);
+  if (a.needs_ack && !a.scene_warning.empty() && !a.ack_scene) {
+    lines.push_back(text(tr("confirm.ack_hint")) | bold);
   } else if (a.replace_needed) {
     lines.push_back(text(trf("confirm.type_codename", a.codename)) | color(Color::Yellow));
     lines.push_back(hbox({text("> "), text(a.typed) | bold | inverted}));
@@ -1774,7 +1775,7 @@ std::pair<std::vector<HelpItem>, std::vector<HelpItem>> help_items(App& a) {
               {"esc", tr("help.back")}};
       break;
     case Screen::Confirm:
-      if (!a.scene_warning.empty() && !a.ack_scene) {
+      if (a.needs_ack && !a.scene_warning.empty() && !a.ack_scene) {
         page = {{"y/enter", tr("help.ack")}, {"esc", tr("help.back")}};
       } else if (a.replace_needed) {
         page = {{"type", tr("help.type")}, {"esc", tr("help.back")}};
@@ -2276,7 +2277,7 @@ bool handle_event(App& a, const Event& e, ScreenInteractive& scr) {
   // otherwise trigger the global single-key shortcuts below).
   const bool typing_codename =
       a.screen == Screen::Confirm && a.replace_needed &&
-      (a.scene_warning.empty() || a.ack_scene);
+      (!a.needs_ack || a.scene_warning.empty() || a.ack_scene);
 
   // In the directory browser, printable letters are a jump-to-prefix filter,
   // so they must not trigger the global shortcuts either.
@@ -2764,7 +2765,7 @@ bool handle_event(App& a, const Event& e, ScreenInteractive& scr) {
         a.screen = Screen::Diff;
         return true;
       }
-      if (!a.scene_warning.empty() && !a.ack_scene) {
+      if (a.needs_ack && !a.scene_warning.empty() && !a.ack_scene) {
         if (e == Event::Character('y') || e == Event::Return) {
           a.ack_scene = true;
           return true;

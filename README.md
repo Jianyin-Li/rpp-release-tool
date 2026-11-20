@@ -102,8 +102,8 @@ version = 1
 artifacts = "/srv/incoming"          # 待发布产物目录
 
 [policy]
-require_both   = true                # 缺 deb/dsc 时弹窗确认
-missing_arch   = "error"             # error | warn | ignore
+require_both   = false               # 缺 deb/dsc 时只提醒；true 才弹确认
+missing_arch   = "warn"              # error | warn | ignore（默认只提醒）
 buildinfo      = "warn"
 sha256         = "error"
 allow_replace  = false               # 允许同版本覆盖（remove + include）
@@ -123,6 +123,12 @@ base = "/srv/reprepro"
 # architectures = ["amd64", "arm64", "source"]         # 默认读该 Codename 的 Architectures
 # incoming      = "/srv/reprepro/incoming"
 ```
+
+策略默认值偏向“只提醒，不硬拦”：
+
+- `require_both = false`：只有 `.deb` 或只有 `.dsc` 时，报告里提醒，但不再强制确认；设为 `true` 才需要确认。
+- `missing_arch = "warn"`：目标架构不齐只提醒；设为 `"error"` 才阻塞。
+- `sha256 = "error"` 保持阻塞，因为校验和不匹配是真实的包损坏/污染。
 
 例如 `conf/distributions` 里有：
 

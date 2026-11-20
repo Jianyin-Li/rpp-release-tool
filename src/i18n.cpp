@@ -326,6 +326,7 @@ constexpr Ent kTable[] = {
     {"confirm.replace", "{} 个文件将被覆盖（内部先 remove 再 include）。", "{} file(s) will be overwritten (remove, then include)."},
     {"confirm.type_codename", "输入 codename「{}」后回车", "type codename \"{}\" and press enter"},
     {"confirm.publish_hint", "按 x 或 y 发布，Esc 取消", "press x or y to publish, esc to cancel"},
+    {"confirm.ack_hint", "按 y 或回车确认上述提醒，Esc 取消", "press y or enter to acknowledge, esc to cancel"},
     {"confirm.binary_label", "仅二进制", "binary-only"},
     {"confirm.source_label", "仅源码", "source-only"},
     {"confirm.acked", "已确认：本次为{}发布", "acknowledged: {} release"},
