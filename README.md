@@ -94,12 +94,13 @@ CI（`.github/workflows/ci.yml`）用 matrix 在 Debian trixie 里构建三种�
 路径：`${XDG_CONFIG_HOME:-~/.config}/rpp-release-tool/config.toml`
 （可用 `--config` 或 `RPP_RELEASE_CONFIG` 覆盖读取路径；首次运行会弹表单创建）
 
+最小配置只需要仓库根目录，其余结构直接从 reprepro 的 `conf/distributions` 读取：
+
 ```toml
 version = 1
-default_repo = "spark"
 
 [paths]
-artifacts = "/tmp/pub/ccid"          # 待发布产物目录
+artifacts = "/srv/incoming"          # 待发布产物目录
 
 [policy]
 require_both   = true                # 缺 deb/dsc 时弹窗确认
@@ -112,29 +113,47 @@ allow_replace  = false               # 允许同版本覆盖（remove + include�
 detail         = "normal"            # summary | normal | full
 unchanged_fold = 15                  # 未变更折叠阈值；-1 不折叠；0 不显示
 language       = "auto"              # auto | zh-CN | en-US
-show_unchanged = true
 
 [[repo]]
-name          = "spark"
-base          = "/srv/reprepro"
-conf          = "/srv/reprepro/conf/distributions"   # reprepro 自己的配置
-codename      = "trixie"
-component     = "main"
-architectures = ["amd64", "arm64", "armhf"]
-incoming      = "/srv/reprepro/incoming"             # 可选
-
-[[repo]]
-name          = "spark-bookworm"
-base          = "/srv/reprepro-bookworm"
-conf          = "/srv/reprepro-bookworm/conf/distributions"
-codename      = "bookworm"
-component     = "main"
-architectures = ["amd64"]
+base = "/srv/reprepro"
+# 下面都可以省略：
+# name          = "spark"                              # 默认用 base 的目录名
+# conf          = "/srv/reprepro/conf/distributions"   # 默认 base/conf/distributions
+# codename      = "trixie"                             # 默认用第一个 Codename
+# component     = "main"                               # 默认用第一个 Components
+# architectures = ["amd64", "arm64", "source"]         # 默认读该 Codename 的 Architectures
+# incoming      = "/srv/reprepro/incoming"
 ```
 
-- 多仓库：`[[repo]]` 数组，TUI 用树形展示 `仓库 → codename → component`
-- 目标架构以 `conf/distributions` 的 `Architectures:` 为准
-- `[ui].detail`：`summary` 只到包节点、`normal` 显示文件、`full` 额外显示 `[index]` 行
+例如 `conf/distributions` 里有：
+
+```
+Codename: bookworm
+Architectures: amd64 arm64 armhf source
+Components: main
+SignWith: 3238B26E255818B9
+
+Codename: trixie
+Architectures: amd64 arm64 armhf source
+Components: main test
+SignWith: 3238B26E255818B9
+```
+
+TUI 会自动展示并让你选择：
+
+```
+spark  /srv/reprepro
+  bookworm
+    main
+  trixie
+    main
+    test
+```
+
+- 一个 reprepro base 只写一个 `[[repo]]`；不要为每个 codename/component 重复写。
+- `name`、`conf`、`codename`、`component`、`architectures` 都是可选的；`conf` 读不到时保存配置会直接报错。
+- 每个 codename 的架构、组件、SignWith 都以 `conf/distributions` 为准。
+- `[ui].detail`：`summary` 只到包节点、`normal` 显示文件、`full` 额外显示 `[index]` 行。
 
 ---
 

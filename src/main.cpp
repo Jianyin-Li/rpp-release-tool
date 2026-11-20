@@ -137,8 +137,14 @@ int run_batch(const Cli& cli, const ConfigLoad& load) {
   if (artifacts.empty()) artifacts = fs::current_path();
 
   Artifacts art = scan_dir(artifacts);
-  RepoConf conf = parse_repo_conf(r.conf);
+  RepoConf conf = parse_repo_conf(repo_conf_path(r));
+  if (r.codename.empty() && !conf.distributions.empty()) {
+    r.codename = conf.distributions.front().codename;
+  }
   const Distribution* dist = find_dist(conf, r.codename);
+  if (r.component.empty()) {
+    r.component = (dist && !dist->components.empty()) ? dist->components.front() : "main";
+  }
 
   CheckInput ci;
   ci.art = &art;
