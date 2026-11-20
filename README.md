@@ -16,13 +16,13 @@ TUI 基于 FTXUI，配置用 TOML（默认 `~/.config/rpp-release-tool/config.to
 |---|---|
 | `.deb` 和 `.dsc` 必须同时在（缺一边只弹窗确认，不硬拦） | 警告 + 确认 |
 | `.dsc` 的 `Files:` / `Checksums-Sha256:` 中每个文件存在，size / md5 / sha256 对得上 | 阻塞 |
-| `.dsc` 必须有 `Priority:`（reprepro 会 `No priority, skipping`） | 阻塞 |
+| `.dsc` 的 `Priority:` 可省略（原生源码包常见，reprepro 可正常处理） | 提示 |
 | `.deb` 的 control 也必须有 `Priority:`（实测 reprepro 会 `No priority given, skipping`） | 阻塞 |
 | `.dsc` 的 `Version` 与所有 `.deb` 的 `Version` 一致；`Source` 名一致；`Binary:` 列表覆盖所有 deb | 阻塞 |
 | `.deb` 覆盖的架构 = 目标架构集合（`all` 单独处理） | 按 policy |
-| `.orig.tar.*` 有对应 `.asc`（并写进 `.dsc`） | 警告 |
-| 每个 `.deb` 有 `.buildinfo` | 按 policy |
-| 目录里没被 `.dsc` 引用的源码文件 | 警告 |
+| `.orig.tar.*` 的 `.asc` 签名 | 可选，不强制 |
+| 每个 `.deb` 有同架构 `.buildinfo` | 按 policy（默认仅提示） |
+| 目录里没被 `.dsc` 引用的真实源码文件（`.orig.tar*`/`.debian.tar*`/原生源码 tar） | 警告（二进制运行包 tar.gz 不算） |
 
 预检还会检查（就是"发布前就知道会不会炸"）：
 
@@ -128,7 +128,7 @@ base = "/srv/reprepro"
 
 - `require_both = true`（默认）：只有 `.deb` 或只有 `.dsc` 时，确认页弹出提醒，需要 `y`/回车确认。
 - `missing_arch = "warn"`（默认）：目标架构不齐时确认页弹出提醒，需要确认；设为 `"error"` 才直接阻塞。
-- `buildinfo = "warn"`（默认）：缺 `.buildinfo` 同样在确认页提醒。
+- `buildinfo = "warn"`（默认）：缺同架构 `.buildinfo` 只在报告里提示，不阻塞、不弹窗。
 - `"ignore"` 完全忽略；`"error"` 直接阻塞。
 - `sha256 = "error"` 保持阻塞，因为校验和不匹配是真实的包损坏/污染。
 - `allow_replace = false` 保持阻塞/需显式开启，因为覆盖是破坏性操作。
@@ -429,7 +429,7 @@ docker exec rpp-trixie /work/build/rpp-release-tool --no-tui --ack --config /rea
 
 - 只支持本机路径（不做远程/ssh 传输）
 - 覆盖（`*`）默认关闭，需要 `[policy].allow_replace = true`；非交互下还要 `--replace`
-- `.asc` / `.buildinfo` 规则目前是 warning，可按 policy 调整
+- `.asc` 签名不强制；`.buildinfo` 缺失默认只提示（CPack 可能只有 `_source.buildinfo`）
 - 不解析 `conf/overrides` 的 Priority/Section 覆盖（依赖 control 字段）
 - 未实现 `incoming/` + `processincoming` 路径（配置里保留了 `incoming` 字段）
 

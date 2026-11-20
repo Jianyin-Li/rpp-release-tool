@@ -401,10 +401,13 @@ static void test_checks() {
   issues = rpp::run_checks(ci);
   CHECK(!rpp::has_blocking(issues));
 
-  // Missing Priority is blocking
+  // Missing .dsc Priority is only a warning (native source packages omit it).
   art.dscs[0].fields.erase("Priority");
   issues = rpp::run_checks(ci);
-  CHECK(rpp::has_blocking(issues));
+  CHECK(!rpp::has_blocking(issues));
+  CHECK(std::any_of(issues.begin(), issues.end(), [](const rpp::Issue& i) {
+    return i.code == "dsc.no_priority" && i.sev == rpp::Severity::Warn;
+  }));
 
   fs::remove_all(dir);
 }

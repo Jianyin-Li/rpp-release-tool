@@ -358,7 +358,7 @@ void evaluate_art(App& a) {
     if (is.sev != Severity::Warn) continue;
     bool scene = is.code == "scene.binary" || is.code == "scene.source";
     if (scene && !a.cfg.policy.require_both) continue;
-    if (scene || is.code == "arch.missing" || is.code == "buildinfo.missing") {
+    if (scene || is.code == "arch.missing") {
       a.confirm_warnings.push_back(is.msg);
     }
   }

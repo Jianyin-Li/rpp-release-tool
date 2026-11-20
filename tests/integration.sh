@@ -139,12 +139,12 @@ echo "$out" | grep -q "includedeb" || fail "missing includedeb"
 echo "$out" | grep -q "reprepro -b $BASE" || fail "wrong base"
 say "ok"
 
-echo "[3] .dsc without Priority is blocking"
+echo "[3] .dsc without Priority only warns"
 PUB2="$WORK/pub2"
 mkdir -p "$PUB2"
 cp "$PUB"/* "$PUB2"/
 sed -i '/^Priority:/d' "$PUB2"/*.dsc
-out=$(run_capture "$BIN" --no-tui --check-only --ack --config "$CFG" "$PUB2") && fail "expected failure"
+out=$(run_capture "$BIN" --no-tui --check-only --ack --config "$CFG" "$PUB2") || fail "expected success"
 echo "$out" | grep -qi "priority" || fail "no priority message"
 say "ok"
 

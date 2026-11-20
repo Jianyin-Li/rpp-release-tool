@@ -37,11 +37,21 @@ std::vector<std::string> dsc_binaries(const DscInfo& d) {
   return out;
 }
 
-bool is_source_artifact_like(const fs::path& p) {
+bool is_source_artifact_for(const fs::path& p, const DscInfo& d) {
   auto name = p.filename().string();
-  return name.find(".orig.tar") != std::string::npos || name.find(".debian.tar") != std::string::npos ||
-         name.find(".orig.tar.gz") != std::string::npos || name.find(".tar.xz") != std::string::npos ||
-         name.find(".tar.gz") != std::string::npos || name.find(".tar.bz2") != std::string::npos;
+  if (name.find(".orig.tar") != std::string::npos ||
+      name.find(".debian.tar") != std::string::npos) {
+    return true;
+  }
+  // Native source packages use <source>_<version>.tar.*; a binary release
+  // bundle such as foo_1.0_linux_amd64.tar.gz does not match this.
+  auto src = dsc_source_name(d);
+  auto ver = d.field("Version");
+  if (!src.empty() && !ver.empty()) {
+    auto native = src + "_" + ver + ".tar.";
+    if (name.rfind(native, 0) == 0) return true;
+  }
+  return false;
 }
 
 }  // namespace
@@ -89,7 +99,7 @@ std::vector<Issue> run_checks(const CheckInput& in) {
   std::set<std::string> listed_files;
   for (const auto& d : a.dscs) {
     if (!d.has("Priority")) {
-      r.push_back({Severity::Block, "dsc.no_priority", tr("check.dsc.no_priority"), {}, d.path});
+      r.push_back({Severity::Warn, "dsc.no_priority", tr("check.dsc.no_priority"), {}, d.path});
     }
     if (!d.has("Version") || d.field("Version").empty()) {
       r.push_back({Severity::Block, "dsc.no_version", tr("check.dsc.no_version"), {}, d.path});
@@ -142,23 +152,11 @@ std::vector<Issue> run_checks(const CheckInput& in) {
       r.push_back({Severity::Ok, "file.ok", trf("check.file.ok", f.name), {}, fp});
     }
 
-    // .orig.tar.* must have a .asc, both on disk and inside Files.
-    for (const auto& f : d.files) {
-      if (f.name.find(".orig.tar") == std::string::npos) continue;
-      fs::path asc = d.path.parent_path() / (f.name + ".asc");
-      std::error_code ec;
-      bool on_disk = fs::exists(asc, ec);
-      bool in_list = listed_files.count(f.name + ".asc") != 0;
-      if (!on_disk || !in_list) {
-        r.push_back({Severity::Warn, "asc.missing", trf("check.asc.missing", f.name), {}, asc});
-      } else {
-        r.push_back({Severity::Ok, "asc.ok", f.name + ".asc", {}, asc});
-      }
-    }
   }
 
   // ---- orphan source artifacts ------------------------------------------
   if (!a.dscs.empty()) {
+    const DscInfo& source_dsc = a.dscs.front();
     std::error_code ec;
     for (auto& e : fs::directory_iterator(a.dir, fs::directory_options::skip_permission_denied, ec)) {
       if (!e.is_regular_file(ec)) continue;
@@ -167,7 +165,7 @@ std::vector<Issue> run_checks(const CheckInput& in) {
       if (ext == ".deb" || ext == ".dsc" || ext == ".changes" || ext == ".buildinfo" ||
           ext == ".asc" || ext == ".sig")
         continue;
-      if (!is_source_artifact_like(e.path())) continue;
+      if (!is_source_artifact_for(e.path(), source_dsc)) continue;
       if (!listed_files.count(name)) {
         r.push_back({Severity::Warn, "file.unlisted", trf("check.file.unlisted", name), {}, e.path()});
       }
