@@ -1,42 +1,75 @@
 #!/usr/bin/env bash
-# Build the release artifacts for the current architecture:
-#   - a Debian package
-#   - a raw (stripped) binary
-# The "debs tar" for reprepro import is assembled separately by
-# scripts/make-debs-tar.sh from all architectures.
+# Build the release artifacts for the current architecture with dpkg-buildpackage:
+#   - .deb, .buildinfo, raw binary
+#   - optionally the native source package (.dsc + source tar)
 #
-# Usage: scripts/make-release.sh [build-dir] [dist-dir]
+# Usage: scripts/make-release.sh [--source] [dist-dir]
+#   --source   also build the source package (do this on one architecture)
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
 VERSION=$(sed -n 's/^project(rpp-release-tool VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
 [ -n "$VERSION" ] || { echo "cannot parse project version from CMakeLists.txt" >&2; exit 1; }
-ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m)
+CHANGELOG_VERSION=$(sed -n '1s/.*(\([^)]*\)).*/\1/p' debian/changelog)
+[ "$VERSION" = "$CHANGELOG_VERSION" ] || {
+  echo "version mismatch: CMake=$VERSION debian/changelog=$CHANGELOG_VERSION" >&2
+  exit 1
+}
+ARCH=$(dpkg --print-architecture)
+# Keep release builds within two cores unless the caller overrides it.
+export DEB_BUILD_OPTIONS="${DEB_BUILD_OPTIONS:-parallel=2}"
 
-BUILD=${1:-build}
-DIST=${2:-dist}
+SOURCE=0
+DIST=dist
+for arg in "$@"; do
+  case "$arg" in
+    --source) SOURCE=1 ;;
+    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+    *) DIST=$arg ;;
+  esac
+done
 
-echo "==> configuring $BUILD"
-cmake -S . -B "$BUILD" -DCMAKE_BUILD_TYPE=Release
-echo "==> building"
-cmake --build "$BUILD" -j"$(nproc)"
+command -v dpkg-buildpackage >/dev/null || {
+  echo "dpkg-buildpackage not found (install dpkg-dev + debhelper)" >&2
+  exit 1
+}
 
+rm -rf "$DIST"
 mkdir -p "$DIST"
-# Clean files but keep the directory itself (it may be a mount point in CI).
-find "$DIST" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 
-echo "==> Debian package ($ARCH)"
-cpack -G DEB -B "$DIST" --config "$BUILD/CPackConfig.cmake"
-rm -rf "$DIST/_CPack_Packages"
+if [ "$SOURCE" = 1 ]; then
+  echo "==> source package"
+  # A native source tar takes the basename of its build directory.  Build a
+  # copy named rpp-release-tool-<version> so the tar has the standard
+  # top-level directory instead of the checkout directory name (e.g. "work").
+  SRC_PARENT=$(mktemp -d)
+  SRC_DIR="$SRC_PARENT/rpp-release-tool-${VERSION}"
+  mkdir -p "$SRC_DIR"
+  tar -C "$PWD" --exclude=.git --exclude=build --exclude=dist --exclude='obj-*' \
+      -cf - . | tar -C "$SRC_DIR" -xf -
+  ( cd "$SRC_DIR" && dpkg-buildpackage -us -uc -S )
+  cp "$SRC_PARENT/rpp-release-tool_${VERSION}.dsc" \
+     "$SRC_PARENT/rpp-release-tool_${VERSION}.tar.xz" "$DIST"/
+  # dpkg-source >= 1.19 omits the top-level Priority field, which reprepro
+  # requires ("No priority, skipping").  Put it back.
+  sed -i '/^Source: /a Priority: optional' "$DIST/rpp-release-tool_${VERSION}.dsc"
+  rm -rf "$SRC_PARENT"
+fi
+
+echo "==> binary package ($ARCH)"
+dpkg-buildpackage -us -uc -b
+
+DEB="../rpp-release-tool_${VERSION}_${ARCH}.deb"
+BUILDINFO="../rpp-release-tool_${VERSION}_${ARCH}.buildinfo"
+cp "$DEB" "$BUILDINFO" "$DIST"/
 
 echo "==> raw binary ($ARCH)"
-BIN="$DIST/rpp-release-tool-$VERSION-linux-$ARCH"
-cp "$BUILD/rpp-release-tool" "$BIN"
-chmod 755 "$BIN"
-if command -v strip >/dev/null 2>&1; then
-  strip "$BIN"
-fi
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+dpkg-deb -x "$DEB" "$TMP"
+cp "$TMP/usr/bin/rpp-release-tool" "$DIST/rpp-release-tool-${VERSION}-linux-${ARCH}"
+chmod 755 "$DIST/rpp-release-tool-${VERSION}-linux-${ARCH}"
 
 echo "==> artifacts"
 ls -lh "$DIST"

@@ -46,16 +46,18 @@ jobs:
               apt-get update
               apt-get install -y --no-install-recommends \
                 build-essential cmake libftxui-dev libtomlplusplus-dev \
-                dpkg-dev file xz-utils
-              cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-              cmake --build build -j"$(nproc)"
-              ./build/rpp_tests
-              bash tests/integration.sh ./build/rpp-release-tool
-              bash scripts/make-release.sh build dist
+                dpkg-dev debhelper fakeroot file xz-utils
+              if [ "${{ matrix.arch }}" = "amd64" ]; then
+                bash scripts/make-release.sh --source dist
+              else
+                bash scripts/make-release.sh dist
+              fi
+              find . -maxdepth 1 -name "obj-*" -type d \
+                -exec ctest --test-dir {} --output-on-failure \;
             '
 
       - name: Fix workspace ownership
-        run: sudo chown -R "$(id -u):$(id -g)" build dist || true
+        run: sudo chown -R "$(id -u):$(id -g)" . || true
 
       - name: Upload ${{ matrix.arch }} artifacts
         uses: actions/upload-artifact@v4
@@ -81,14 +83,7 @@ jobs:
           merge-multiple: true
 
       - name: Make the repo-import tar and checksums
-        run: |
-          mkdir -p dist
-          find incoming -maxdepth 1 -type f \
-            \( -name '*.deb' -o -name 'rpp-release-tool-*-linux-*' \) \
-            -exec cp -p {} dist/ \;
-          shopt -s nullglob
-          for f in dist/rpp-release-tool-*-linux-*; do chmod +x "$f"; done
-          bash scripts/make-debs-tar.sh dist
+        run: bash scripts/make-repo-tar.sh incoming dist
 
       - name: Show artifacts
         run: ls -lh dist

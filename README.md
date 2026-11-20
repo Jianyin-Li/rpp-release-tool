@@ -48,25 +48,34 @@ cmake --build build -j
 - CMake ≥ 3.16、GCC 13+（用到 `std::format`）
 - FTXUI：优先系统包（Debian trixie 的 `libftxui-dev`），找不到则 FetchContent `v6.1.9`
 - toml++：优先 `find_package(tomlplusplus)`，否则 FetchContent `v3.4.0`
+- 打 deb/源码包还需要：`dpkg-dev`、`debhelper`、`fakeroot`、`file`、`xz-utils`
 
 运行时需要：`dpkg-deb`、`md5sum`、`sha256sum`、`gpg`、`reprepro`。
 
 ### 打包与发布
 
-```bash
-# 当前架构：deb + 原始二进制
-bash scripts/make-release.sh
+发布包用标准的 `dpkg-buildpackage`（debhelper）构建，因此会同时产生 `.buildinfo` 和源码包：
 
-# 把 dist/ 里所有 .deb 打成给 reprepro 导入用的未压缩 tar，并生成校验和
-bash scripts/make-debs-tar.sh
+```bash
+# 当前架构：.deb + .buildinfo + 原始二进制；--source 同时生成 .dsc 和源码 tar
+bash scripts/make-release.sh --source build-out
+
+# 把 deb + dsc + 源码 tar + buildinfo 汇总成一个未压缩 tar（供 reprepro 导入）
+# 注意输入和输出用不同目录，脚本会重建输出目录
+bash scripts/make-repo-tar.sh build-out dist
 ```
 
-输出到 `dist/`：
+输出：
 
-- `rpp-release-tool_0.0.1_<arch>.deb`：安装到 `/usr/bin/rpp-release-tool`，文档在 `/usr/share/doc/rpp-release-tool/`（README、LICENSE、示例配置）。
-- `rpp-release-tool-0.0.1-linux-<arch>`：原始二进制（已 strip）。它动态链接 FTXUI/toml++，直接运行需要对应运行库。
-- `rpp-release-tool-debs-0.0.1.tar`：**不压缩**，包含所有架构的 `.deb`，就是需要导入仓库的那一个包。解包后可直接 `reprepro includedeb ...` 或用本工具发布。
-- `sha256sums.txt`：以上文件校验和。
+- `rpp-release-tool_0.0.1_<arch>.deb`：安装到 `/usr/bin/rpp-release-tool`，文档在 `/usr/share/doc/rpp-release-tool/`。
+- `rpp-release-tool-0.0.1-linux-<arch>`：原始二进制（dh_strip 已 strip）。
+- `rpp-release-tool-0.0.1-repo.tar`：**不压缩**，包含：
+  - 全部架构的 `.deb`
+  - `rpp-release-tool_0.0.1.dsc` + 源码 `rpp-release-tool_0.0.1.tar.xz`
+  - 每个架构的 `.buildinfo`
+  
+  解包后直接指向该目录，本工具会看到完整源码 + 三个二进制 + buildinfo，不再有 “only .deb / missing .buildinfo” 警告。
+- `sha256sums.txt`：release 目录内文件的校验和。
 
 CI（`.github/workflows/ci.yml`）用 matrix 在 Debian trixie 里构建三种架构：
 
@@ -76,7 +85,7 @@ CI（`.github/workflows/ci.yml`）用 matrix 在 Debian trixie 里构建三种�
 | arm64 | `linux/arm64`（QEMU） |
 | armhf | `linux/arm/v7`（QEMU） |
 
-每个架构都会跑单测和集成测试，然后产出该架构的 `.deb` 与原始二进制。最后的 `assemble` job 把它们合并，生成一个包含全部 `.deb` 的 `rpp-release-tool-debs-0.0.1.tar` 和 `sha256sums.txt`。推送 `v*` 标签时自动创建 GitHub Release，附件为：三个架构的 `.deb`、三个原始二进制、一个 debs tar、校验和文件（不再发布源码 tar，源码在仓库里）。
+每个架构用 `dpkg-buildpackage -b` 产出 `.deb` + `.buildinfo` + 原始二进制；amd64 额外用 `dpkg-buildpackage -S` 产出源码包。最后的 `assemble` job 汇总成一个 `rpp-release-tool-0.0.1-repo.tar` 和校验和。推送 `v*` 标签时自动创建 GitHub Release，附件为：三个 `.deb`、三个原始二进制、一个 repo tar、校验和文件。
 
 ---
 
