@@ -1,0 +1,15 @@
+Source: rpp-release-tool
+Section: utils
+Priority: optional
+Maintainer: Jianyin Li <lixiaotumail@163.com>
+Build-Depends: debhelper-compat (= 13), cmake, libftxui-dev, libtomlplusplus-dev, dpkg-dev, file, xz-utils
+Standards-Version: 4.6.2
+Homepage: https://github.com/Jianyin-Li/rpp-release-tool
+Rules-Requires-Root: no
+
+Package: rpp-release-tool
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, reprepro, dpkg, gnupg
+Description: reprepro release gate TUI
+ Scan and validate .deb/.dsc artifacts, preview the reprepro diff, publish
+ through reprepro, verify the result, and maintain published packages.

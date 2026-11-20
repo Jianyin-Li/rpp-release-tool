@@ -1,4 +1,12 @@
 build/
+build-out/
 dist/
+obj-*/
+debian/.debhelper/
+debian/debhelper-build-stamp
+debian/files
+debian/rpp-release-tool/
+debian/*.debhelper
+debian/*.substvars
 *.tmp
 *.log

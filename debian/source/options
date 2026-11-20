@@ -1,0 +1,9 @@
+tar-ignore = .git
+tar-ignore = build
+tar-ignore = dist
+tar-ignore = obj-*
+tar-ignore = debian/.debhelper
+tar-ignore = debian/files
+tar-ignore = debian/rpp-release-tool
+tar-ignore = debian/debhelper-build-stamp
+tar-ignore = debian/*.substvars
