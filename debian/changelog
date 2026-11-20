@@ -1,3 +1,19 @@
+rpp-release-tool (0.0.5) trixie; urgency=medium
+
+  * Read codename/component/architectures from conf/distributions on every
+    run; stop storing them in the app config or showing them in settings.
+  * Merge the two home-menu settings entries into a single Settings page.
+  * Policy: require_both defaults to true; missing_arch and buildinfo
+    warnings are shown on the confirm page. sha256 and allow_replace remain
+    blocking.
+  * Publish only with y/Enter.
+  * Relax checks reprepro does not require: .dsc Priority is a warning,
+    .asc signatures are optional, per-arch .buildinfo is a warning only,
+    and binary runtime tar.gz bundles are not treated as source files.
+  * CI: stop building armhf; build/test/package amd64 and arm64.
+
+ -- Jianyin Li <lixiaotumail@163.com>  Sat, 21 Nov 2026 00:20:57 +0800
+
 rpp-release-tool (0.0.4) trixie; urgency=medium
 
   * Bump version to 0.0.4.
