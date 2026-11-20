@@ -140,6 +140,71 @@ static void test_config_roundtrip() {
   fs::remove_all(dir);
 }
 
+static void test_minimal_repo_config() {
+  fs::path dir = make_tmp();
+  write_file(dir / "conf" / "distributions",
+             "Origin: Test\n"
+             "Codename: bookworm\n"
+             "Suite: bookworm\n"
+             "Architectures: amd64 arm64 source\n"
+             "Components: main\n"
+             "Description: test\n"
+             "\n"
+             "Origin: Test\n"
+             "Codename: trixie\n"
+             "Suite: trixie\n"
+             "Architectures: amd64 armhf source\n"
+             "Components: main test\n"
+             "Description: test\n");
+
+  auto path = dir / "config.toml";
+  write_file(path,
+             "version = 1\n"
+             "[paths]\n"
+             "artifacts = \"/tmp/pub\"\n"
+             "[[repo]]\n"
+             "base = \"" + dir.string() + "\"\n");
+
+  auto load = rpp::load_config(path);
+  CHECK(load.ok);
+  CHECK(load.cfg.repos.size() == 1);
+  const auto& r = load.cfg.repos[0];
+  CHECK(r.name == dir.filename().string());
+  CHECK(r.conf == dir / "conf" / "distributions");
+  CHECK(r.codename.empty());
+  CHECK(r.component.empty());
+  CHECK(r.architectures.empty());
+  CHECK(rpp::repo_conf_path(r) == dir / "conf" / "distributions");
+
+  std::vector<std::string> errs;
+  CHECK(rpp::validate_config(load.cfg, &errs));
+  CHECK(errs.empty());
+
+  // A relative conf is resolved against base, not the current directory.
+  auto path2 = dir / "config2.toml";
+  write_file(path2,
+             "version = 1\n"
+             "[[repo]]\n"
+             "base = \"" + dir.string() + "\"\n"
+             "conf = \"conf/distributions\"\n");
+  auto load2 = rpp::load_config(path2);
+  CHECK(load2.ok);
+  CHECK(load2.cfg.repos[0].conf == "conf/distributions");
+  CHECK(rpp::repo_conf_path(load2.cfg.repos[0]) == dir / "conf" / "distributions");
+  errs.clear();
+  CHECK(rpp::validate_config(load2.cfg, &errs));
+
+  // Missing config file is reported by validation instead of being accepted.
+  auto bad = dir / "bad.toml";
+  write_file(bad, "version = 1\n[[repo]]\nbase = \"" + dir.string() + "\"\nconf = \"missing/distributions\"\n");
+  auto load3 = rpp::load_config(bad);
+  CHECK(load3.ok);
+  errs.clear();
+  CHECK(!rpp::validate_config(load3.cfg, &errs));
+  CHECK(!errs.empty());
+  fs::remove_all(dir);
+}
+
 static rpp::Artifacts make_artifacts(const fs::path& dir) {
   rpp::Artifacts a;
   a.dir = dir;
@@ -478,6 +543,7 @@ int main() {
   test_dsc_parse();
   test_reprepro_conf();
   test_config_roundtrip();
+  test_minimal_repo_config();
   test_diff();
   test_folding();
   test_checks();

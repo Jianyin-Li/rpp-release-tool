@@ -20,6 +20,9 @@ fs::path expand_user(const std::string& p);
 fs::path default_config_path();
 std::vector<fs::path> config_candidates();
 
+// Repo.conf may be empty ("use base/conf/distributions") or relative to base.
+fs::path repo_conf_path(const Repo& repo);
+
 Config default_config();
 ConfigLoad load_config(const fs::path& explicit_path = {});
 bool save_config(const Config& cfg, const fs::path& path, std::string* err);

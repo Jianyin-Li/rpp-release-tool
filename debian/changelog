@@ -1,3 +1,9 @@
+rpp-release-tool (0.0.3) trixie; urgency=medium
+
+  * Bump version to 0.0.3.
+
+ -- Jianyin Li <lixiaotumail@163.com>  Fri, 20 Nov 2026 21:03:54 +0800
+
 rpp-release-tool (0.0.1) trixie; urgency=medium
 
   * Initial release.

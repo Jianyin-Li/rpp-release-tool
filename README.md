@@ -1,6 +1,6 @@
 # rpp-release-tool
 
-版本：**0.0.1**
+版本：**0.0.3**
 
 reprepro 的**发布前置闸门**：扫描产物目录 → 校验 `.deb` / `.dsc` → 预检目标仓库 → 预览变更树 → 确认 → 真正执行 reprepro → 发布后核对。
 
@@ -67,11 +67,11 @@ bash scripts/make-repo-tar.sh build-out dist
 
 输出：
 
-- `rpp-release-tool_0.0.1_<arch>.deb`：安装到 `/usr/bin/rpp-release-tool`，文档在 `/usr/share/doc/rpp-release-tool/`。
-- `rpp-release-tool-0.0.1-linux-<arch>`：原始二进制（dh_strip 已 strip）。
-- `rpp-release-tool-0.0.1-repo.tar`：**不压缩**，包含：
+- `rpp-release-tool_0.0.3_<arch>.deb`：安装到 `/usr/bin/rpp-release-tool`，文档在 `/usr/share/doc/rpp-release-tool/`。
+- `rpp-release-tool-0.0.3-linux-<arch>`：原始二进制（dh_strip 已 strip）。
+- `rpp-release-tool-0.0.3-repo.tar`：**不压缩**，包含：
   - 全部架构的 `.deb`
-  - `rpp-release-tool_0.0.1.dsc` + 源码 `rpp-release-tool_0.0.1.tar.xz`
+  - `rpp-release-tool_0.0.3.dsc` + 源码 `rpp-release-tool_0.0.3.tar.xz`
   - 每个架构的 `.buildinfo`
   
   解包后直接指向该目录，本工具会看到完整源码 + 三个二进制 + buildinfo，不再有 “only .deb / missing .buildinfo” 警告。
@@ -85,7 +85,7 @@ CI（`.github/workflows/ci.yml`）用 matrix 在 Debian trixie 里构建三种�
 | arm64 | `linux/arm64`（QEMU） |
 | armhf | `linux/arm/v7`（QEMU） |
 
-每个架构用 `dpkg-buildpackage -b` 产出 `.deb` + `.buildinfo` + 原始二进制；amd64 额外用 `dpkg-buildpackage -S` 产出源码包。最后的 `assemble` job 汇总成一个 `rpp-release-tool-0.0.1-repo.tar` 和校验和。推送 `v*` 标签时自动创建 GitHub Release，附件为：三个 `.deb`、三个原始二进制、一个 repo tar、校验和文件。
+每个架构用 `dpkg-buildpackage -b` 产出 `.deb` + `.buildinfo` + 原始二进制；amd64 额外用 `dpkg-buildpackage -S` 产出源码包。最后的 `assemble` job 汇总成一个 `rpp-release-tool-0.0.3-repo.tar` 和校验和。推送 `v*` 标签时自动创建 GitHub Release，附件为：三个 `.deb`、三个原始二进制、一个 repo tar、校验和文件。
 
 ---
 
@@ -94,12 +94,13 @@ CI（`.github/workflows/ci.yml`）用 matrix 在 Debian trixie 里构建三种�
 路径：`${XDG_CONFIG_HOME:-~/.config}/rpp-release-tool/config.toml`
 （可用 `--config` 或 `RPP_RELEASE_CONFIG` 覆盖读取路径；首次运行会弹表单创建）
 
+最小配置只需要仓库根目录，其余结构直接从 reprepro 的 `conf/distributions` 读取：
+
 ```toml
 version = 1
-default_repo = "spark"
 
 [paths]
-artifacts = "/tmp/pub/ccid"          # 待发布产物目录
+artifacts = "/srv/incoming"          # 待发布产物目录
 
 [policy]
 require_both   = true                # 缺 deb/dsc 时弹窗确认
@@ -112,29 +113,47 @@ allow_replace  = false               # 允许同版本覆盖（remove + include�
 detail         = "normal"            # summary | normal | full
 unchanged_fold = 15                  # 未变更折叠阈值；-1 不折叠；0 不显示
 language       = "auto"              # auto | zh-CN | en-US
-show_unchanged = true
 
 [[repo]]
-name          = "spark"
-base          = "/srv/reprepro"
-conf          = "/srv/reprepro/conf/distributions"   # reprepro 自己的配置
-codename      = "trixie"
-component     = "main"
-architectures = ["amd64", "arm64", "armhf"]
-incoming      = "/srv/reprepro/incoming"             # 可选
-
-[[repo]]
-name          = "spark-bookworm"
-base          = "/srv/reprepro-bookworm"
-conf          = "/srv/reprepro-bookworm/conf/distributions"
-codename      = "bookworm"
-component     = "main"
-architectures = ["amd64"]
+base = "/srv/reprepro"
+# 下面都可以省略：
+# name          = "spark"                              # 默认用 base 的目录名
+# conf          = "/srv/reprepro/conf/distributions"   # 默认 base/conf/distributions
+# codename      = "trixie"                             # 默认用第一个 Codename
+# component     = "main"                               # 默认用第一个 Components
+# architectures = ["amd64", "arm64", "source"]         # 默认读该 Codename 的 Architectures
+# incoming      = "/srv/reprepro/incoming"
 ```
 
-- 多仓库：`[[repo]]` 数组，TUI 用树形展示 `仓库 → codename → component`
-- 目标架构以 `conf/distributions` 的 `Architectures:` 为准
-- `[ui].detail`：`summary` 只到包节点、`normal` 显示文件、`full` 额外显示 `[index]` 行
+例如 `conf/distributions` 里有：
+
+```
+Codename: bookworm
+Architectures: amd64 arm64 armhf source
+Components: main
+SignWith: 3238B26E255818B9
+
+Codename: trixie
+Architectures: amd64 arm64 armhf source
+Components: main test
+SignWith: 3238B26E255818B9
+```
+
+TUI 会自动展示并让你选择：
+
+```
+spark  /srv/reprepro
+  bookworm
+    main
+  trixie
+    main
+    test
+```
+
+- 一个 reprepro base 只写一个 `[[repo]]`；不要为每个 codename/component 重复写。
+- `name`、`conf`、`codename`、`component`、`architectures` 都是可选的；`conf` 读不到时保存配置会直接报错。
+- 每个 codename 的架构、组件、SignWith 都以 `conf/distributions` 为准。
+- `[ui].detail`：`summary` 只到包节点、`normal` 显示文件、`full` 额外显示 `[index]` 行。
 
 ---
 

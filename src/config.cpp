@@ -7,6 +7,7 @@
 #include <toml++/toml.hpp>
 
 #include "i18n.hpp"
+#include "reprepro_conf.hpp"
 
 namespace rpp {
 namespace {
@@ -87,6 +88,12 @@ fs::path default_config_path() {
   std::string xdg = env("XDG_CONFIG_HOME");
   fs::path base = xdg.empty() ? expand_user("~/.config") : fs::path(xdg);
   return base / "rpp-release-tool" / "config.toml";
+}
+
+fs::path repo_conf_path(const Repo& repo) {
+  fs::path conf = repo.conf.empty() ? fs::path("conf/distributions") : repo.conf;
+  if (conf.is_absolute() || repo.base.empty()) return conf;
+  return repo.base / conf;
 }
 
 std::vector<fs::path> config_candidates() {
@@ -176,7 +183,7 @@ ConfigLoad load_config(const fs::path& explicit_path) {
         rp.base = expand_user(str(*rt, "base"));
         rp.conf = expand_user(str(*rt, "conf", (rp.base / "conf" / "distributions").string()));
         rp.codename = str(*rt, "codename");
-        rp.component = str(*rt, "component", "main");
+        rp.component = str(*rt, "component");
         rp.architectures = str_array(rt->get("architectures"));
         rp.incoming = expand_user(str(*rt, "incoming"));
         if (rp.name.empty() && !rp.base.empty()) rp.name = rp.base.filename().string();
@@ -235,11 +242,16 @@ bool validate_config(const Config& cfg, std::vector<std::string>* errs) {
   std::vector<std::string> local;
   if (cfg.repos.empty()) local.push_back(tr("config.need_repo"));
   for (const auto& r : cfg.repos) {
-    if (r.name.empty()) local.push_back(trf("config.need_field", tr("field.name")));
     if (r.base.empty()) local.push_back(trf("config.need_field", tr("field.base")));
-    if (r.conf.empty()) local.push_back(trf("config.need_field", tr("field.conf")));
-    if (r.codename.empty()) local.push_back(trf("config.need_field", tr("field.codename")));
-    if (r.component.empty()) local.push_back(trf("config.need_field", tr("field.component")));
+    // name/codename/component/architectures are optional: they are derived
+    // from the distributions file when omitted.
+    fs::path cp = repo_conf_path(r);
+    RepoConf rc = parse_repo_conf(cp);
+    if (!rc.ok) {
+      local.push_back(trf("config.repo_conf_error", cp.string(), rc.error));
+    } else if (rc.distributions.empty()) {
+      local.push_back(trf("config.repo_conf_empty", cp.string()));
+    }
   }
   if (errs) *errs = local;
   return local.empty();
@@ -291,10 +303,10 @@ std::string config_to_string(const Config& cfg) {
     os << "\n[[repo]]\n";
     os << "name = " << quote(r.name) << "\n";
     os << "base = " << quote(r.base.string()) << "\n";
-    os << "conf = " << quote(r.conf.string()) << "\n";
-    os << "codename = " << quote(r.codename) << "\n";
-    os << "component = " << quote(r.component) << "\n";
-    os << "architectures = " << arr(r.architectures) << "\n";
+    if (!r.conf.empty()) os << "conf = " << quote(r.conf.string()) << "\n";
+    if (!r.codename.empty()) os << "codename = " << quote(r.codename) << "\n";
+    if (!r.component.empty()) os << "component = " << quote(r.component) << "\n";
+    if (!r.architectures.empty()) os << "architectures = " << arr(r.architectures) << "\n";
     if (!r.incoming.empty()) os << "incoming = " << quote(r.incoming.string()) << "\n";
   }
   return os.str();

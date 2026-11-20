@@ -226,7 +226,7 @@ void set_language(App& a, Lang l) {
 }
 
 void load_conf(App& a) {
-  a.conf = parse_repo_conf(current_repo(a).conf);
+  a.conf = parse_repo_conf(repo_conf_path(current_repo(a)));
 }
 
 void ensure_selection(App& a) {
@@ -260,7 +260,7 @@ void rebuild_repo_rows(App& a) {
   a.repo_rows.clear();
   for (std::size_t i = 0; i < a.cfg.repos.size(); ++i) {
     const Repo& r = a.cfg.repos[i];
-    RepoConf rc = parse_repo_conf(r.conf);
+    RepoConf rc = parse_repo_conf(repo_conf_path(r));
     RepoRow rr;
     rr.kind = RepoRow::Kind::Repo;
     rr.repo = static_cast<int>(i);
@@ -644,7 +644,7 @@ void show_repo_details(App& a) {
   const RepoRow& row = a.repo_rows[static_cast<std::size_t>(a.repo_sel)];
   if (row.repo < 0 || row.repo >= static_cast<int>(a.cfg.repos.size())) return;
   Repo& repo = a.cfg.repos[static_cast<std::size_t>(row.repo)];
-  RepoConf rc = parse_repo_conf(repo.conf);
+  RepoConf rc = parse_repo_conf(repo_conf_path(repo));
 
   std::string codename = row.codename.empty() ? repo.codename : row.codename;
   std::string component = row.component.empty() ? repo.component : row.component;
@@ -1023,6 +1023,7 @@ void apply_fields(App& a) {
   };
   if (has("name")) r.name = field_value(a, "name");
   if (has("base")) r.base = expand_user(field_value(a, "base"));
+  if (r.name.empty() && !r.base.empty()) r.name = r.base.filename().string();
   if (has("conf")) r.conf = expand_user(field_value(a, "conf"));
   if (has("codename")) r.codename = field_value(a, "codename");
   if (has("component")) r.component = field_value(a, "component");
@@ -1206,10 +1207,16 @@ Element render_form(App& a) {
   for (std::size_t i = 0; i < a.fields.size(); ++i) {
     lines.push_back(field_element(a.fields[i], static_cast<int>(i) == a.focus));
   }
+  if (a.screen == Screen::Config || a.tab == 0) {
+    lines.push_back(text(tr("config.auto_hint")) | dim);
+  }
 
   // live conf parse status
   if (!a.fields.empty() && a.fields.front().key == "name") {
-    std::string conf_path = expand_user(field_value(a, "conf"));
+    Repo edited;
+    edited.base = expand_user(field_value(a, "base"));
+    edited.conf = expand_user(field_value(a, "conf"));
+    fs::path conf_path = repo_conf_path(edited);
     RepoConf rc = parse_repo_conf(conf_path);
     Element status = rc.ok
         ? text(trf("config.conf_ok", rc.distributions.size())) | color(Color::Green)
