@@ -329,7 +329,12 @@ void evaluate_art(App& a) {
   a.issues = run_checks(ci);
 
   PreflightInput pi;
-  pi.repo = r;
+  // The selected codename/component may be derived from conf/distributions
+  // rather than stored in the repo config; preflight must see the selection.
+  Repo target = r;
+  target.codename = a.codename;
+  target.component = a.component;
+  pi.repo = target;
   pi.conf = a.conf;
   pi.art = &a.art;
   pi.policy = &a.cfg.policy;
@@ -1780,7 +1785,7 @@ std::pair<std::vector<HelpItem>, std::vector<HelpItem>> help_items(App& a) {
       } else if (a.replace_needed) {
         page = {{"type", tr("help.type")}, {"esc", tr("help.back")}};
       } else {
-        page = {{"x / y / enter", tr("help.publish")}, {"esc", tr("help.back")}};
+        page = {{"y / enter", tr("help.publish")}, {"esc", tr("help.back")}};
       }
       break;
     case Screen::Verify:
@@ -2791,8 +2796,8 @@ bool handle_event(App& a, const Event& e, ScreenInteractive& scr) {
         }
         return false;
       }
-      if (e == Event::Character('y') || e == Event::Character('x') ||
-          e == Event::Character('Y') || e == Event::Character('X') || e == Event::Return) {
+      if (e == Event::Character('y') || e == Event::Character('Y') ||
+          e == Event::Return) {
         execute_publish(a, scr);
         return true;
       }
