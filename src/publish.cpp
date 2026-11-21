@@ -103,7 +103,7 @@ std::vector<Issue> run_preflight(const PreflightInput& in) {
         }
       }
     } else {
-      r.push_back({Severity::Warn, "pf.arch_empty", trf("pf.warn_only", ""), tr("common.na"), repo.conf});
+      r.push_back({Severity::Warn, "pf.arch_empty", tr("pf.arch_none"), {}, repo.conf});
     }
 
     if (dist->sign_with.empty()) {

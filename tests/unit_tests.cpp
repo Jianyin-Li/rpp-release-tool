@@ -1,5 +1,6 @@
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -105,6 +106,18 @@ static void test_reprepro_conf() {
   fs::remove_all(dir);
 }
 
+static void test_policy_defaults() {
+  rpp::Policy p;
+  CHECK(p.require_both);
+  CHECK(p.missing_arch == "warn");
+  CHECK(p.buildinfo == "warn");
+  CHECK(p.sha256 == "error");
+  CHECK(!p.allow_replace);
+  rpp::Config c = rpp::default_config();
+  CHECK(c.policy.require_both);
+  CHECK(c.policy.missing_arch == "warn");
+}
+
 static void test_config_roundtrip() {
   fs::path dir = make_tmp();
   auto path = dir / "config.toml";
@@ -131,8 +144,10 @@ static void test_config_roundtrip() {
   CHECK(load.exists);
   CHECK(load.cfg.repos.size() == 1);
   CHECK(load.cfg.repos[0].name == "spark");
-  CHECK(load.cfg.repos[0].architectures.size() == 2);
-  CHECK(load.cfg.repos[0].codename == "trixie");
+  // Derived fields are not stored in the app config anymore.
+  CHECK(load.cfg.repos[0].architectures.empty());
+  CHECK(load.cfg.repos[0].codename.empty());
+  CHECK(load.cfg.repos[0].component.empty());
   CHECK(load.cfg.ui.detail == "full");
   CHECK(load.cfg.ui.unchanged_fold == 5);
   CHECK(load.cfg.ui.language == "en-US");
@@ -193,6 +208,24 @@ static void test_minimal_repo_config() {
   CHECK(rpp::repo_conf_path(load2.cfg.repos[0]) == dir / "conf" / "distributions");
   errs.clear();
   CHECK(rpp::validate_config(load2.cfg, &errs));
+
+  // Legacy derived fields are ignored on load and not written back.
+  auto path4 = dir / "config4.toml";
+  write_file(path4,
+             "version = 1\n"
+             "[[repo]]\n"
+             "base = \"" + dir.string() + "\"\n"
+             "codename = \"trixie\"\n"
+             "component = \"main\"\n"
+             "architectures = [\"amd64\", \"armhf\"]\n");
+  auto load4 = rpp::load_config(path4);
+  CHECK(load4.ok);
+  CHECK(load4.cfg.repos[0].codename.empty());
+  CHECK(load4.cfg.repos[0].component.empty());
+  CHECK(load4.cfg.repos[0].architectures.empty());
+  auto serialized = rpp::config_to_string(load4.cfg);
+  CHECK(serialized.find("codename") == std::string::npos);
+  CHECK(serialized.find("architectures") == std::string::npos);
 
   // Missing config file is reported by validation instead of being accepted.
   auto bad = dir / "bad.toml";
@@ -369,10 +402,33 @@ static void test_checks() {
   issues = rpp::run_checks(ci);
   CHECK(!rpp::has_blocking(issues));
 
-  // Missing Priority is blocking
+  // Missing .dsc Priority is only a warning (native source packages omit it).
   art.dscs[0].fields.erase("Priority");
   issues = rpp::run_checks(ci);
-  CHECK(rpp::has_blocking(issues));
+  CHECK(!rpp::has_blocking(issues));
+  CHECK(std::any_of(issues.begin(), issues.end(), [](const rpp::Issue& i) {
+    return i.code == "dsc.no_priority" && i.sev == rpp::Severity::Warn;
+  }));
+
+  // Missing per-architecture .buildinfo is a warning, never a block.
+  pol.buildinfo = "warn";
+  issues = rpp::run_checks(ci);
+  CHECK(!rpp::has_blocking(issues));
+  CHECK(std::any_of(issues.begin(), issues.end(), [](const rpp::Issue& i) {
+    return i.code == "buildinfo.missing" && i.sev == rpp::Severity::Warn;
+  }));
+
+  // An unlisted native source tar is flagged, a binary runtime bundle is not.
+  art.dscs[0].fields["Version"] = "1:2.0";
+  write_file(dir / "ccid_2.0.tar.xz", "x");
+  write_file(dir / "ccid_2.0_linux_amd64.tar.gz", "x");
+  issues = rpp::run_checks(ci);
+  CHECK(std::any_of(issues.begin(), issues.end(), [](const rpp::Issue& i) {
+    return i.code == "file.unlisted" && i.msg.find("ccid_2.0.tar.xz") != std::string::npos;
+  }));
+  CHECK(std::none_of(issues.begin(), issues.end(), [](const rpp::Issue& i) {
+    return i.code == "file.unlisted" && i.msg.find("_linux_amd64") != std::string::npos;
+  }));
 
   fs::remove_all(dir);
 }
@@ -542,6 +598,7 @@ static void test_i18n() {
 int main() {
   test_dsc_parse();
   test_reprepro_conf();
+  test_policy_defaults();
   test_config_roundtrip();
   test_minimal_repo_config();
   test_diff();

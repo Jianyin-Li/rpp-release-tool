@@ -1,5 +1,6 @@
 #include <unistd.h>
 
+#include <algorithm>
 #include <iostream>
 #include <sstream>
 
@@ -185,7 +186,14 @@ int run_batch(const Cli& cli, const ConfigLoad& load) {
   std::cout << "\n";
 
   bool blocked = has_blocking(issues);
-  bool needs_ack = art.scene == Scene::BinaryOnly || art.scene == Scene::SourceOnly;
+  // Mirror the TUI: a missing target arch with missing_arch="warn" is a
+  // confirmation, not a silent pass.  Only the warnings the confirm page
+  // shows count (buildinfo stays informational).
+  bool needs_ack = (cfg.policy.require_both &&
+                    (art.scene == Scene::BinaryOnly || art.scene == Scene::SourceOnly)) ||
+                   std::any_of(issues.begin(), issues.end(), [](const Issue& i) {
+                     return i.sev == Severity::Warn && i.code == "arch.missing";
+                   });
   if (tree.modified > 0 && !cfg.policy.allow_replace) blocked = true;
   // Overwriting an existing version is destructive: --ack alone is not enough,
   // non-interactive callers must also pass --replace.
@@ -257,7 +265,7 @@ int main(int argc, char** argv) {
     return kExitOk;
   }
   if (cli.version) {
-    std::cout << "rpp-release-tool 0.0.3\n";
+    std::cout << "rpp-release-tool 0.0.5\n";
     return kExitOk;
   }
   if (cli.show_config) {
