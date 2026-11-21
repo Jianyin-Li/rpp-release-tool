@@ -109,9 +109,6 @@ language = "en-US"
 name = "test"
 base = "$BASE"
 conf = "$BASE/conf/distributions"
-codename = "trixie"
-component = "main"
-architectures = ["amd64"]
 EOF
 
 run_capture() {
@@ -145,7 +142,7 @@ mkdir -p "$PUB2"
 cp "$PUB"/* "$PUB2"/
 sed -i '/^Priority:/d' "$PUB2"/*.dsc
 out=$(run_capture "$BIN" --no-tui --check-only --ack --config "$CFG" "$PUB2") || fail "expected success"
-echo "$out" | grep -qi "priority" || fail "no priority message"
+echo "$out" | grep -q "\.dsc has no Priority" || fail "no .dsc priority warning"
 say "ok"
 
 echo "[4] binary-only needs acknowledgement"
@@ -158,15 +155,70 @@ fi
 run_capture "$BIN" --no-tui --check-only --ack --config "$CFG" "$PUB3" >/dev/null || fail "expected exit 0 with --ack"
 say "ok"
 
-echo "[5] source-only is detected"
+echo "[5] source-only needs acknowledgement too"
 PUB4="$WORK/pub4"
 mkdir -p "$PUB4"
 cp "$PUB"/*.dsc "$PUB"/*.tar.* "$PUB4"/
-out=$(run_capture "$BIN" --no-tui --check-only --ack --config "$CFG" "$PUB4") || fail "expected exit 0"
+out=$(run_capture "$BIN" --no-tui --check-only --config "$CFG" "$PUB4") || true
 echo "$out" | grep -qi "source-only\|only .dsc" || fail "no source-only warning"
+if run_capture "$BIN" --no-tui --check-only --config "$CFG" "$PUB4" >/dev/null; then
+  fail "expected exit 2 without --ack"
+fi
+run_capture "$BIN" --no-tui --check-only --ack --config "$CFG" "$PUB4" >/dev/null || fail "expected exit 0 with --ack"
 say "ok"
 
-echo "[6] missing config"
+echo "[6] missing architecture warns and needs acknowledgement"
+BASE2="$WORK/repo2"
+mkdir -p "$BASE2/conf" "$BASE2/db" "$BASE2/pool" \
+         "$BASE2/dists/trixie/main/binary-amd64" "$BASE2/dists/trixie/main/binary-arm64" \
+         "$BASE2/dists/trixie/main/source"
+cat > "$BASE2/conf/distributions" <<'EOF'
+Codename: trixie
+Suite: trixie
+Components: main
+Architectures: amd64 arm64 source
+EOF
+: > "$BASE2/dists/trixie/main/binary-amd64/Packages"
+: > "$BASE2/dists/trixie/main/binary-arm64/Packages"
+: > "$BASE2/dists/trixie/main/source/Sources"
+CFG2="$WORK/config2.toml"
+sed -e "s|$BASE|$BASE2|g" -e 's/missing_arch = "error"/missing_arch = "warn"/' "$CFG" > "$CFG2"
+out=$(run_capture "$BIN" --no-tui --check-only --config "$CFG2") || true
+echo "$out" | grep -q "missing a .deb for architecture arm64" || fail "no missing-arm64 warning"
+if run_capture "$BIN" --no-tui --check-only --config "$CFG2" >/dev/null; then
+  fail "expected exit 2 without --ack for missing arch"
+fi
+run_capture "$BIN" --no-tui --check-only --ack --config "$CFG2" >/dev/null || fail "expected exit 0 with --ack"
+say "ok"
+
+echo "[7] legacy codename/component/architectures in config are ignored"
+CFG3="$WORK/config3.toml"
+cat > "$CFG3" <<EOF
+version = 1
+default_repo = "test"
+
+[paths]
+artifacts = "$PUB"
+
+[policy]
+require_both = true
+missing_arch = "error"
+buildinfo = "warn"
+sha256 = "error"
+
+[[repo]]
+name = "test"
+base = "$BASE"
+conf = "$BASE/conf/distributions"
+codename = "ghost"
+component = "ghost"
+architectures = ["i386"]
+EOF
+out=$(run_capture "$BIN" --no-tui --check-only --ack --config "$CFG3") || fail "expected success"
+echo "$out" | grep -q "test/trixie/main" || fail "legacy codename/component were not replaced by live conf values"
+say "ok"
+
+echo "[8] missing config"
 if "$BIN" --no-tui --config "$WORK/nope.toml" >/dev/null 2>&1; then
   fail "expected config error"
 fi

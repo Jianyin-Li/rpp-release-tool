@@ -351,14 +351,16 @@ void evaluate_art(App& a) {
   auto pf = run_preflight(pi);
   a.issues.insert(a.issues.end(), pf.begin(), pf.end());
 
-  // Non-security policy warnings are surfaced as a confirmation popup on the
-  // confirm screen (require_both, missing_arch=warn, buildinfo=warn).
+  // Warnings that require a confirmation on the confirm screen: missing
+  // .deb/.dsc (require_both) and missing target architectures.  buildinfo is
+  // reported but stays informational.
   a.confirm_warnings.clear();
   for (const auto& is : a.issues) {
     if (is.sev != Severity::Warn) continue;
-    bool scene = is.code == "scene.binary" || is.code == "scene.source";
-    if (scene && !a.cfg.policy.require_both) continue;
-    if (scene || is.code == "arch.missing") {
+    if (is.code == "arch.missing") {
+      a.confirm_warnings.push_back(is.msg);
+    } else if ((is.code == "scene.binary" || is.code == "scene.source") &&
+               a.cfg.policy.require_both) {
       a.confirm_warnings.push_back(is.msg);
     }
   }
@@ -2356,8 +2358,9 @@ bool handle_event(App& a, const Event& e, ScreenInteractive& scr) {
         a.home_sel = e.character()[0] - '1';
         // fall through to open below
       }
-      if (e == Event::Return || (e.is_character() && e.character().size() == 1 &&
-                                 e.character()[0] >= '1' && e.character()[0] <= '3')) {
+      if (e == Event::Return ||
+          (e.is_character() && e.character().size() == 1 &&
+           e.character()[0] >= '1' && e.character()[0] <= '3')) {
         switch (a.home_sel) {
           case 0:
             a.repos_purpose = ReposPurpose::Upload;
@@ -2789,7 +2792,11 @@ bool handle_event(App& a, const Event& e, ScreenInteractive& scr) {
           return true;
         }
         if (e.is_character()) {
-          a.typed += e.character();
+          // Ignore control characters (Delete, Tab, ...) instead of
+          // appending them to the codename.
+          for (char c : e.character()) {
+            if (static_cast<unsigned char>(c) >= 0x20 && c != 0x7f) a.typed.push_back(c);
+          }
           return true;
         }
         if (e == Event::Return) {

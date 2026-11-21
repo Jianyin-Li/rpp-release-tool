@@ -1,5 +1,6 @@
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -407,6 +408,26 @@ static void test_checks() {
   CHECK(!rpp::has_blocking(issues));
   CHECK(std::any_of(issues.begin(), issues.end(), [](const rpp::Issue& i) {
     return i.code == "dsc.no_priority" && i.sev == rpp::Severity::Warn;
+  }));
+
+  // Missing per-architecture .buildinfo is a warning, never a block.
+  pol.buildinfo = "warn";
+  issues = rpp::run_checks(ci);
+  CHECK(!rpp::has_blocking(issues));
+  CHECK(std::any_of(issues.begin(), issues.end(), [](const rpp::Issue& i) {
+    return i.code == "buildinfo.missing" && i.sev == rpp::Severity::Warn;
+  }));
+
+  // An unlisted native source tar is flagged, a binary runtime bundle is not.
+  art.dscs[0].fields["Version"] = "1:2.0";
+  write_file(dir / "ccid_2.0.tar.xz", "x");
+  write_file(dir / "ccid_2.0_linux_amd64.tar.gz", "x");
+  issues = rpp::run_checks(ci);
+  CHECK(std::any_of(issues.begin(), issues.end(), [](const rpp::Issue& i) {
+    return i.code == "file.unlisted" && i.msg.find("ccid_2.0.tar.xz") != std::string::npos;
+  }));
+  CHECK(std::none_of(issues.begin(), issues.end(), [](const rpp::Issue& i) {
+    return i.code == "file.unlisted" && i.msg.find("_linux_amd64") != std::string::npos;
   }));
 
   fs::remove_all(dir);

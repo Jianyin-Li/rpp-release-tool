@@ -293,6 +293,7 @@ constexpr Ent kTable[] = {
     {"pf.arch_ok", "架构 {} 已启用", "architecture {} is enabled"},
     {"pf.sign_missing", "找不到签名密钥 {} 的私钥", "no secret key for {}"},
     {"pf.sign_none", "conf 没有 SignWith，InRelease 将不会签名", "no SignWith in conf; InRelease will not be signed"},
+    {"pf.arch_none", "conf/distributions 未声明 Architectures，跳过架构检查", "conf/distributions declares no Architectures; architecture checks skipped"},
     {"pf.sign_ok", "签名密钥 {} 可用", "signing key {} is available"},
     {"pf.not_writable", "{} 当前用户不可写", "{} is not writable by the current user"},
     {"pf.locked", "仓库数据库被占用: {}", "repository database is locked: {}"},

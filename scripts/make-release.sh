@@ -25,7 +25,7 @@ DIST=dist
 for arg in "$@"; do
   case "$arg" in
     --source) SOURCE=1 ;;
-    -h|--help) sed -n '2,9p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
     *) DIST=$arg ;;
   esac
 done

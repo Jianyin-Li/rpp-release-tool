@@ -45,8 +45,11 @@ bool is_source_artifact_for(const fs::path& p, const DscInfo& d) {
   }
   // Native source packages use <source>_<version>.tar.*; a binary release
   // bundle such as foo_1.0_linux_amd64.tar.gz does not match this.
+  // dpkg-source writes filenames without the epoch ("1:2.0" -> "foo_2.0").
   auto src = dsc_source_name(d);
   auto ver = d.field("Version");
+  auto colon = ver.find(':');
+  if (colon != std::string::npos) ver = ver.substr(colon + 1);
   if (!src.empty() && !ver.empty()) {
     auto native = src + "_" + ver + ".tar.";
     if (name.rfind(native, 0) == 0) return true;
@@ -151,7 +154,6 @@ std::vector<Issue> run_checks(const CheckInput& in) {
       }
       r.push_back({Severity::Ok, "file.ok", trf("check.file.ok", f.name), {}, fp});
     }
-
   }
 
   // ---- orphan source artifacts ------------------------------------------
